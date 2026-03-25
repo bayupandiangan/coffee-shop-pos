@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Products</title>
+  <link rel="stylesheet" href="../styles/main.css">
+  <link rel="stylesheet" href="../styles/components.css">
+</head>
+<body>
+  <div class="app-container">
+    <div id="sidebar"></div>
+    <main class="content">
+      <div class="header">
+        <h1>Product Management</h1>
+        <button id="addProductBtn" class="btn-primary">+ Add Product</button>
+      </div>
+      <div id="productsGrid" class="products-grid"></div>
+    </main>
+  </div>
+
+  <!-- Modal for product form -->
+  <div id="productModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2 id="modalTitle">Add Product</h2>
+      <form id="productForm">
+        <input type="hidden" id="productId">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="productName" required>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="productCategory">
+            <option value="Coffee">Coffee</option>
+            <option value="Non-Coffee">Non-Coffee</option>
+            <option value="Snacks">Snacks</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Price (Rp)</label>
+          <input type="number" id="productPrice" step="1000" required>
+        </div>
+        <div class="form-group">
+          <label>Stock</label>
+          <input type="number" id="productStock" required>
+        </div>
+        <div class="form-group">
+          <label>Image URL (optional)</label>
+          <input type="text" id="productImage">
+        </div>
+        <button type="submit" class="btn-primary">Save</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { loadSidebar } from '../components/sidebar.js';
+
+    const user = await window.electronAPI.getCurrentUser();
+    if (!user || user.role !== 'admin') window.electronAPI.navigate('pos'); // only admin
+
+    const sidebar = loadSidebar(user.role);
+    document.getElementById('sidebar').appendChild(sidebar);
+
+    let products = [];
+
+    function renderProducts() {
+      const grid = document.getElementById('productsGrid');
+      grid.innerHTML = '';
+      products.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'product-card';
+        card.innerHTML = `
+          <img src="${p.image || '../assets/default-product.png'}" alt="${p.name}">
+          <h3>${p.name}</h3>
+          <p>${p.category}</p>
+          <p class="price">Rp${p.price}</p>
+          <p>Stock: ${p.stock}</p>
+          <div class="actions">
+            <button class="edit-btn" data-id="${p.id}">Edit</button>
+            <button class="delete-btn" data-id="${p.id}">Delete</button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      // Attach event listeners
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const id = parseInt(btn.getAttribute('data-id'));
+          const product = products.find(p => p.id === id);
+          openModal(product);
+        });
+      });
+
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const id = parseInt(btn.getAttribute('data-id'));
+          if (confirm('Delete this product?')) {
+            await window.electronAPI.deleteProduct(id);
+            loadProducts();
+          }
+        });
+      });
+    }
+
+    async function loadProducts() {
+      products = await window.electronAPI.getProducts();
+      renderProducts();
+    }
+
+    function openModal(product = null) {
+      const modal = document.getElementById('productModal');
+      const title = document.getElementById('modalTitle');
+      const form = document.getElementById('productForm');
+      if (product) {
+        title.textContent = 'Edit Product';
+        document.getElementById('productId').value = product.id;
+        document.getElementById('productName').value = product.name;
+        document.getElementById('productCategory').value = product.category;
+        document.getElementById('productPrice').value = product.price;
+        document.getElementById('productStock').value = product.stock;
+        document.getElementById('productImage').value = product.image || '';
+      } else {
+        title.textContent = 'Add Product';
+        form.reset();
+        document.getElementById('productId').value = '';
+      }
+      modal.style.display = 'block';
+    }
+
+    document.getElementById('addProductBtn').addEventListener('click', () => openModal());
+    document.querySelector('.close').addEventListener('click', () => {
+      document.getElementById('productModal').style.display = 'none';
+    });
+
+    document.getElementById('productForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('productId').value;
+      const product = {
+        name: document.getElementById('productName').value,
+        category: document.getElementById('productCategory').value,
+        price: parseFloat(document.getElementById('productPrice').value),
+        stock: parseInt(document.getElementById('productStock').value),
+        image: document.getElementById('productImage').value,
+      };
+      if (id) {
+        await window.electronAPI.updateProduct(parseInt(id), product);
+      } else {
+        await window.electronAPI.addProduct(product);
+      }
+      document.getElementById('productModal').style.display = 'none';
+      loadProducts();
+    });
+
+    loadProducts();
+  </script>
+</body>
+</html>

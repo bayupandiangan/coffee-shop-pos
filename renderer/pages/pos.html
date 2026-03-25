@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>POS</title>
+  <link rel="stylesheet" href="../styles/main.css">
+  <link rel="stylesheet" href="../styles/components.css">
+  <style>
+    .pos-container {
+      display: flex;
+      gap: 20px;
+    }
+    .products-panel {
+      flex: 2;
+    }
+    .cart-panel {
+      flex: 1;
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .product-item {
+      background: white;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .product-item:hover {
+      transform: translateY(-2px);
+    }
+    .product-item img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .cart-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    .cart-item button {
+      background: #E14434;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 2px 6px;
+    }
+    .total {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin: 20px 0;
+      text-align: right;
+    }
+    .payment-section {
+      margin-top: 20px;
+    }
+    #paymentInput {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    #change {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+    #completeBtn {
+      background: #5EABD6;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .search-bar {
+      margin-bottom: 20px;
+    }
+    #searchInput {
+      width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <div id="sidebar"></div>
+    <main class="content">
+      <h1>Point of Sale</h1>
+      <div class="pos-container">
+        <div class="products-panel">
+          <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search products...">
+          </div>
+          <div id="productGrid" class="product-grid"></div>
+        </div>
+        <div class="cart-panel">
+          <h3>Cart</h3>
+          <div id="cartItems"></div>
+          <div class="total">Total: Rp<span id="totalAmount">0</span></div>
+          <div class="payment-section">
+            <label>Payment Amount:</label>
+            <input type="number" id="paymentInput" step="1000" placeholder="Enter amount">
+            <div>Change: Rp<span id="change">0</span></div>
+            <button id="completeBtn" class="btn-primary">Complete Transaction</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { loadSidebar } from '../components/sidebar.js';
+    import { showToast } from '../components/toast.js';
+
+    const user = await window.electronAPI.getCurrentUser();
+    if (!user) window.electronAPI.navigate('login');
+
+    const sidebar = loadSidebar(user.role);
+    document.getElementById('sidebar').appendChild(sidebar);
+
+    let products = [];
+    let cart = [];
+
+    // Load products
+    async function loadProducts() {
+      products = await window.electronAPI.getProducts();
+      renderProductGrid();
+    }
+
+    function renderProductGrid(searchTerm = '') {
+      const grid = document.getElementById('productGrid');
+      const filtered = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      grid.innerHTML = filtered.map(p => `
+        <div class="product-item" data-id="${p.id}">
+          <img src="${p.image || '../assets/default-product.png'}" alt="${p.name}">
+          <div><strong>${p.name}</strong></div>
+          <div>Rp${p.price}</div>
+          <div>Stock: ${p.stock}</div>
+        </div>
+      `).join('');
+
+      // Attach click events
+      document.querySelectorAll('.product-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const id = parseInt(el.getAttribute('data-id'));
+          const product = products.find(p => p.id === id);
+          addToCart(product);
+        });
+      });
+    }
+
+    function addToCart(product) {
+      const existing = cart.find(item => item.id === product.id);
+      if (existing) {
+        existing.quantity++;
+      } else {
+        cart.push({ id: product.id, name: product.name, price: product.price, quantity: 1 });
+      }
+      renderCart();
+    }
+
+    function renderCart() {
+      const cartDiv = document.getElementById('cartItems');
+      cartDiv.innerHTML = cart.map((item, idx) => `
+        <div class="cart-item">
+          <span>${item.name} x ${item.quantity}</span>
+          <span>Rp${item.price * item.quantity}</span>
+          <button data-index="${idx}">Remove</button>
+        </div>
+      `).join('');
+      const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      document.getElementById('totalAmount').innerText = total;
+
+      // Remove buttons
+      document.querySelectorAll('.cart-item button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = parseInt(btn.getAttribute('data-index'));
+          cart.splice(idx, 1);
+          renderCart();
+        });
+      });
+
+      // Update change calculation
+      calculateChange();
+    }
+
+    function calculateChange() {
+      const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const payment = parseFloat(document.getElementById('paymentInput').value) || 0;
+      const change = payment - total;
+      document.getElementById('change').innerText = change >= 0 ? change : 0;
+    }
+
+    document.getElementById('paymentInput').addEventListener('input', calculateChange);
+
+    document.getElementById('completeBtn').addEventListener('click', async () => {
+      const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const payment = parseFloat(document.getElementById('paymentInput').value);
+      if (payment < total) {
+        alert('Insufficient payment');
+        return;
+      }
+      const change = payment - total;
+
+      const transactionData = {
+        items: cart.map(item => ({ productId: item.id, quantity: item.quantity, price: item.price })),
+        total,
+        payment,
+        change,
+      };
+
+      try {
+        const result = await window.electronAPI.createTransaction(transactionData);
+        // Print receipt
+        const receipt = {
+          items: cart,
+          total,
+          payment,
+          change,
+          date: new Date(),
+        };
+        await window.electronAPI.printReceipt(receipt);
+        showToast('Transaction completed!', 'success');
+        // Reset cart
+        cart = [];
+        renderCart();
+        document.getElementById('paymentInput').value = '';
+        loadProducts(); // refresh stock display
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      }
+    });
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      renderProductGrid(e.target.value);
+    });
+
+    loadProducts();
+  </script>
+</body>
+</html>

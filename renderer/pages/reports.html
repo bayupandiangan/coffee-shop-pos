@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reports</title>
+  <link rel="stylesheet" href="../styles/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <div id="sidebar"></div>
+    <main class="content">
+      <h1>Sales Reports</h1>
+      <div class="filters">
+        <label>From: <input type="date" id="startDate"></label>
+        <label>To: <input type="date" id="endDate"></label>
+        <button id="loadReportBtn">Load Report</button>
+        <button id="exportPdfBtn">Export PDF</button>
+      </div>
+      <canvas id="salesChart" width="800" height="400"></canvas>
+    </main>
+  </div>
+
+  <script type="module">
+    import { loadSidebar } from '../components/sidebar.js';
+    const user = await window.electronAPI.getCurrentUser();
+    if (!user || user.role !== 'admin') window.electronAPI.navigate('pos');
+
+    const sidebar = loadSidebar(user.role);
+    document.getElementById('sidebar').appendChild(sidebar);
+
+    let chart;
+    let currentData = [];
+
+    async function loadReport() {
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      if (!startDate || !endDate) {
+        alert('Please select date range');
+        return;
+      }
+      currentData = await window.electronAPI.getDetailedSales(startDate, endDate);
+      const labels = currentData.map(row => row.date);
+      const totals = currentData.map(row => row.daily_total);
+      if (chart) chart.destroy();
+      const ctx = document.getElementById('salesChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Daily Sales (Rp)',
+            data: totals,
+            borderColor: '#5EABD6',
+            backgroundColor: 'rgba(94,171,214,0.1)',
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    async function exportPdf() {
+      if (!currentData.length) {
+        alert('No data to export');
+        return;
+      }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text('Sales Report', 20, 20);
+      let y = 30;
+      doc.text('Date', 20, y);
+      doc.text('Sales (Rp)', 80, y);
+      y += 10;
+      currentData.forEach(row => {
+        doc.text(row.date, 20, y);
+        doc.text(row.daily_total.toString(), 80, y);
+        y += 8;
+      });
+      doc.save('sales-report.pdf');
+    }
+
+    document.getElementById('loadReportBtn').addEventListener('click', loadReport);
+    document.getElementById('exportPdfBtn').addEventListener('click', exportPdf);
+
+    // Set default dates (last 7 days)
+    const today = new Date();
+    const weekAgo = new Date();
+    weekAgo.setDate(today.getDate() - 7);
+    document.getElementById('startDate').value = weekAgo.toISOString().split('T')[0];
+    document.getElementById('endDate').value = today.toISOString().split('T')[0];
+    loadReport();
+  </script>
+</body>
+</html>

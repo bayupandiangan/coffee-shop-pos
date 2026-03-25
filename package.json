@@ -1,0 +1,35 @@
+{
+  "name": "coffee-shop-pos",
+  "version": "1.0.0",
+  "description": "Coffee Shop POS Desktop App",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "nodemon --exec electron .",
+    "build": "electron-builder"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.0.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.4",
+    "node-thermal-printer": "^4.6.0"
+  },
+  "devDependencies": {
+    "electron-rebuild": "^3.2.9",
+    "nodemon": "^3.0.1"
+  },
+  "build": {
+    "appId": "com.yourcompany.coffeepos",
+    "productName": "Coffee Shop POS",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    }
+  }
+}
